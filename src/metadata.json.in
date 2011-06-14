@@ -1,0 +1,8 @@
+{
+"uuid": "@uuid@",
+"name": "Wallpapers",
+"description": "Wallpapers",
+"shell-version": [ "@shell_current@" ],
+"localedir": "@LOCALEDIR@",
+"url": "@url@"
+}

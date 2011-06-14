@@ -1,0 +1,1 @@
+1) Edit src/extension.js and set DIRECTORIES = [ "dir1", "dir2"] with the image directories that you want

@@ -1,1 +1,9 @@
-1) Edit src/extension.js and set DIRECTORIES = [ "dir1", "dir2"] with the image directories that you want
+GNOME SHELL EXTENSION WALLPAPERS
+----------------
+ * Extension to change wallpaper on gnome shell
+
+Wallpaper directories
+-------
+To change where to search wallpapers edit src/extension.js and set DIRECTORIES = [ "dir1", "dir2"] with the image directories that you want
+
+By default it searchs in /usr/share/backgrounds AND $HOME/Pictures

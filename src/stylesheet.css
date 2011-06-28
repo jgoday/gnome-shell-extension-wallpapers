@@ -5,3 +5,14 @@
     padding: 4px;
     border-radius: 4px;
 }
+
+.wallpaper-label {
+    color: #ffffff;
+    font-size: 7.5pt;
+}
+
+.wallpaper-page-indicator {
+    color: #ffffff;
+    font-size: 7.5pt;
+    font-weight: bold;
+}

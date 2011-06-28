@@ -17,7 +17,8 @@ const St = imports.gi.St;
 const Tweener = imports.ui.tweener;
 
 const DIRECTORIES = ["/usr/share/backgrounds",
-                     GLib.get_home_dir() + "/Pictures"];
+                     GLib.get_home_dir() + "/Pictures",
+                     GLib.get_user_data_dir() + "/wallpapers"];
 
 const THUMBNAIL_WIDTH = 300;
 const THUMBNAIL_HEIGHT = 190;
@@ -28,11 +29,9 @@ const CELL_HEIGHT = 190;
 const SET_BACKGROUND_SCHEMA = "org.gnome.desktop.background";
 const SET_BACKGROUND_KEY = "picture-uri";
 const SPINNER_ANIMATION_TIME = 0.2;
+const IMAGES_LIMIT = 30 ;
 
 const _  = Gettext.gettext;
-const _d = function(msg) {
-    global.logError("Wallpapers -> " + msg);
-}
 
 String.prototype.isImage = function() {
     let upper = this.toUpperCase();
@@ -52,15 +51,40 @@ function ImageProvider() {
 
 ImageProvider.prototype = {
     _init: function() {
+        this._offset = 0;
         this._images = [];
     },
     search: function() {
     },
-    addImage: function(name, thumbnail_path, complete_path) {
+    next: function() {
+        this._offset += IMAGES_LIMIT ;
+        this.clean();
+    },
+    previous: function() {
+        this._offset += IMAGES_LIMIT * -1;
+        this.clean();
+    },
+    offset: function() {
+        return this._offset;
+    },
+    clean: function() {
+        this._images = [];
+    },
+    count: function() {
+        return IMAGES_LIMIT;
+    },
+    totalCount: function() {
+        return 0;
+    },
+    pageDescription: function() {
+        return _("Page") + " " + ( Math.ceil(this._offset / IMAGES_LIMIT ) ) ;
+    },
+    addImage: function(name, thumbnail_path, complete_path, label) {
         this._images.push({
             name: name,
             thumbnail_path: thumbnail_path,
-            complete_path: complete_path
+            complete_path: complete_path,
+            label: label
         });
     },
     images: function() {
@@ -87,25 +111,33 @@ LocalProvider.prototype = {
 
         let i = 0;
         let obj = this;
+        let count = 0 ;
 
         for ( i = 0; i < dirs.length; i++ ) {
             let dir = dirs[i];
             let lastDir = ( i == dirs.length - 1) ;
+            let limit_start = obj.offset();
+            let limit_end   = limit_start + IMAGES_LIMIT ;
 
-            FileUtils.listDirAsync(Gio.file_new_for_path(dir), function(files) {
-                for (let x = 0; x < files.length; x++) {
-                    let name = files[x].get_name();
-                    if (name.isImage()) {
-                        obj.addImage(name, "file://" + dir + "/" + name,
-                                           "file://" + dir + "/" + name);
+/**            if (GLib.file_test(dir, GLib.FileTest.IS_DIR)) {
+                FileUtils.listDirAsync(Gio.file_new_for_path(dir), function(files) {
+                    for (let x = 0; x < files.length; x++) {
+                        let name = files[x].get_name();
+                        if (count >= limit_start && count <= limit_end &&
+                            name.isImage()) {
+                            obj.addImage(name, "file://" + dir + "/" + name,
+                                               "file://" + dir + "/" + name,
+                                                "");
+                        }
+                        count = count + 1;
                     }
-                }
-                if (lastDir) {
-                    obj.emit("search_images_done");
-                }
-            });
-        }
-/**
+                    if (lastDir) {
+                        obj.emit("search_images_done");
+                    }
+                });
+            }
+        }**/
+
             let wallsDir = Gio.file_new_for_path(dir);
             if (wallsDir.query_exists(null)) {
                 let children = wallsDir.enumerate_children('standard::name',
@@ -113,16 +145,18 @@ LocalProvider.prototype = {
                 let file = null;
                 while (( file = children.next_file(null) ) != null ) {
                     let name = file.get_name();
-                    if (name.isImage()) {
+                    if (name.isImage() && count >= limit_start &&
+                        count < limit_end) {
                         this.addImage(name, "file://" + dir + "/" + name,
-                                            "file://" + dir + "/" + name);
+                                            "file://" + dir + "/" + name,
+                                            "");
                     }
+                    count ++;
                 }
 
             }
         }
         obj.emit('search_images_done');
-**/
     }
 }
 
@@ -139,13 +173,14 @@ DeviantArtProvider.prototype = {
     _init: function() {
         ImageProvider.prototype._init.call(this);
 
-        let url = "http://backend.deviantart.com/rss.xml?q=boost%3Apopular+in%3Acustomization%2Fwallpaper&type=deviation";
+        this._url = "http://backend.deviantart.com/rss.xml?q=boost%3Apopular+in%3Acustomization%2Fwallpaper&type=deviation";
         default xml namespace = "http://www.w3.org/1999/xhtml";
         this.session = new Soup.SessionAsync();
-        this.message = Soup.Message.new("GET", url);
+        this.message = null ;
     },
     search: function() {
         let obj = this;
+        this.message = Soup.Message.new("GET", this._url + "&offset=" + this.offset());
 
         this.session.queue_message(this.message, function(s, m) {
             function safe_xml(data) {
@@ -161,6 +196,9 @@ DeviantArtProvider.prototype = {
 
             for each (var item in items) {
                 let thumbnail = item.mediaNs::thumbnail[0];
+                let copyright = ( item.mediaNs::copyright != null ) ?
+                                  item.mediaNs::copyright[0].toString() :
+                                  "";
                 let content = null;
                 for each (var c in item.mediaNs::content) {
                     if (c.@medium == "document") {
@@ -171,7 +209,8 @@ DeviantArtProvider.prototype = {
                     let thumbnail_url = thumbnail.@url.toString();
                     obj.addImage(thumbnail_url.substring(thumbnail_url.lastIndexOf("/")),
                                 thumbnail_url,
-                                content);
+                                content,
+                                copyright);
                 }
             }
 
@@ -196,6 +235,7 @@ WallImage.prototype = {
         this._parent = grid;
 
         let box = new Shell.GenericContainer();
+        let layout = new St.BoxLayout({ vertical: true });
         box.connect("allocate", Lang.bind(this, this._allocate));
 
         let textureCache = St.TextureCache.get_default();
@@ -208,9 +248,15 @@ WallImage.prototype = {
                                         image.thumbnail_path,
                                         THUMBNAIL_WIDTH,
                                         THUMBNAIL_HEIGHT)});
-        box.add_actor(this._thumbnail);
+        this._label = new St.Label({style_class: 'wallpaper-label',
+                                    text: image.label});
 
-        let clickable = new St.Button({'reactive': true, 'x_fill': true, 'y_fill': true,
+        layout.add_actor(this._thumbnail);
+        layout.add(this._label);
+        box.add_actor(layout);
+
+        let clickable = new St.Button({'reactive': true,
+                                       'x_fill': true, 'y_fill': true,
                                        'y_align': St.Align.MIDDLE });
         clickable.set_child(box);
         this.actor = clickable;
@@ -219,18 +265,26 @@ WallImage.prototype = {
     },
     _allocate: function(container, box, flags) {
         let childBox = new Clutter.ActorBox();
+        let labelBox = new Clutter.ActorBox();
 
         childBox.x1 = 0;
         childBox.y1 = 0;
         childBox.x2 = CELL_WIDTH;
         childBox.y2 = CELL_HEIGHT;
+
+        labelBox.x1 = 0;
+        labelBox.y1 = CELL_HEIGHT + 3;
+        labelBox.x2 = CELL_WIDTH;
+        labelBox.y2 = 30;
+
         this._thumbnail.allocate(childBox, flags);
+        this._label.allocate(labelBox, flags);
     },
 
     _onClicked: function() {
         let obj = this ;
         this.emit("download_started");
-        
+
         GLib.idle_add(GLib.PRIORITY_DEFAULT,
             function() { obj._setBackground(); },
             null, function () {});
@@ -243,15 +297,19 @@ WallImage.prototype = {
 
         if (file_path.indexOf("http") == 0) {
             let f = Gio.file_new_for_uri(file_path);
-            file_path = "/tmp/" + this._image.name;
+            let directory = GLib.get_user_data_dir() + "/wallapers/" ;
+            file_path = directory + this._image.name;
+            if (!GLib.file_test(directory, GLib.FileTest.IS_DIR)) {
+                GLib.mkdir_with_parents(directory, 0x1c0);
+            }
 
             f.copy(Gio.file_new_for_path(file_path),
                     Gio.FileCopyFlags.OVERWRITE,
                     Gio.Cancellable.get_current(),
                     function(c, total) {
                         let percentage = c * 100 / total ;
-// obj._parent._on_download_progress(this, c * 100 / total);
-                        obj.emit("download_progress", c * 100 / total);
+
+//                        obj.emit("download_progress", c * 100 / total);
                         if ( percentage >= 100 ) {
                             obj.emit("done");
                         }
@@ -294,8 +352,10 @@ WallSelector.prototype = {
         this._grid = new Shell.GenericContainer();
         this._grid.connect('allocate', Lang.bind(this, this._gridAllocate));
 
-        this._grid.connect('get-preferred-width', Lang.bind(this, this._getPreferredWidth));
-        this._grid.connect('get-preferred-height', Lang.bind(this, this._getPreferredHeight));
+        this._grid.connect('get-preferred-width',
+                    Lang.bind(this, this._getPreferredWidth));
+        this._grid.connect('get-preferred-height',
+                    Lang.bind(this, this._getPreferredHeight));
 
         let scrollview = new St.ScrollView({ x_fill: true,  y_fill: true });
         scrollview.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC);
@@ -332,10 +392,18 @@ WallSelector.prototype = {
 
         let nextIcon = new St.Icon({icon_name: 'go-next'});
         let prevIcon = new St.Icon({icon_name: 'go-previous'});
-        this._indicator_label = new St.Label({text: ""});
+        this._nextButton = new St.Button();
+        this._prevButton = new St.Button();
+        this._nextButton.set_child(nextIcon);
+        this._prevButton.set_child(prevIcon);
+        this._indicator_label = new St.Label({text: "",
+                                    style_class: "wallpaper-page-indicator"});
         bottomBox.add(this._indicator_label, {expand: true});
-        bottomBox.add(prevIcon, {x_align: St.Align.END, x_fill: false});
-        bottomBox.add(nextIcon, {x_align: St.Align.END, x_fill: false});
+        bottomBox.add(this._prevButton, {x_align: St.Align.END, x_fill: false});
+        bottomBox.add(this._nextButton, {x_align: St.Align.END, x_fill: false});
+
+        this._nextButton.connect("clicked", Lang.bind(this, this._onNextClicked));
+        this._prevButton.connect("clicked", Lang.bind(this, this._onPrevClicked));
 
         this.actor.add(bottomBox);
 
@@ -349,6 +417,7 @@ WallSelector.prototype = {
 
     update: function() {
         this.startAnimation();
+        this._indicator_label.set_text(this._provider.pageDescription());
         this._provider.connect('search_images_done',
                             Lang.bind(this, this._createWallpapersGrid));
 /**
@@ -460,7 +529,6 @@ WallSelector.prototype = {
     _addWallpaper: function(i, total, image) {
         let wallBox = new WallImage(this, image);
         wallBox.connect("download_started", Lang.bind(this, this.startAnimation));
-        wallBox.connect("download_progress", Lang.bind(this, this._on_download_progress));
         wallBox.connect("done", Lang.bind(this, this.stopAndExit));
 
         this._grid.add_actor(wallBox.actor);
@@ -472,14 +540,22 @@ WallSelector.prototype = {
         this.update();
     },
 
-    _on_download_progress: function(o, p) {
-        this._indicator_label.set_text(p + "%");
-    },
-
     _onLocalClicked: function() {
         // Limpiamos e consultamos
         this.clean();
         this._provider = new LocalProvider();
+        this.update();
+    },
+
+    _onNextClicked: function() {
+        this.clean();
+        this._provider.next();
+        this.update();
+    },
+
+    _onPrevClicked: function() {
+        this.clean();
+        this._provider.previous();
         this.update();
     }
 };

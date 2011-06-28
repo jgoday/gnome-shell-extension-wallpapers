@@ -29,7 +29,7 @@ const CELL_HEIGHT = 190;
 const SET_BACKGROUND_SCHEMA = "org.gnome.desktop.background";
 const SET_BACKGROUND_KEY = "picture-uri";
 const SPINNER_ANIMATION_TIME = 0.2;
-const IMAGES_LIMIT = 30 ;
+const IMAGES_LIMIT = 20 ;
 
 const _  = Gettext.gettext;
 
@@ -53,31 +53,45 @@ ImageProvider.prototype = {
     _init: function() {
         this._offset = 0;
         this._images = [];
+        this._total_count = 0;
     },
     search: function() {
     },
     next: function() {
-        this._offset += IMAGES_LIMIT ;
-        this.clean();
+        if (this._total_count <= 0 ||
+            (this._total_count > this._offset + IMAGES_LIMIT)) {
+            this._offset += IMAGES_LIMIT ;
+        }
+        this.cleanImages();
     },
     previous: function() {
-        this._offset += IMAGES_LIMIT * -1;
-        this.clean();
+        if (this._offset > 0) {
+            this._offset += IMAGES_LIMIT * -1;
+        }
+        this.cleanImages();
     },
     offset: function() {
         return this._offset;
     },
-    clean: function() {
+    cleanImages: function() {
         this._images = [];
     },
     count: function() {
         return IMAGES_LIMIT;
     },
     totalCount: function() {
-        return 0;
+        return this._total_count;
     },
     pageDescription: function() {
-        return _("Page") + " " + ( Math.ceil(this._offset / IMAGES_LIMIT ) ) ;
+        function pages(c) { return Math.ceil(c / IMAGES_LIMIT) + 1; }
+
+        let total = "";
+        if (this._total_count > 0) {
+            total = " " + _("of") + " " + (pages(this._total_count) - 1) +
+                    " " + _("pages");
+        }
+
+        return _("Page") + " " + ( pages(this._offset) ) + total ;
     },
     addImage: function(name, thumbnail_path, complete_path, label) {
         this._images.push({
@@ -153,7 +167,7 @@ LocalProvider.prototype = {
                     }
                     count ++;
                 }
-
+                this._total_count = count;
             }
         }
         obj.emit('search_images_done');
@@ -173,14 +187,17 @@ DeviantArtProvider.prototype = {
     _init: function() {
         ImageProvider.prototype._init.call(this);
 
-        this._url = "http://backend.deviantart.com/rss.xml?q=boost%3Apopular+in%3Acustomization%2Fwallpaper&type=deviation";
+        this._url = "http://backend.deviantart.com/rss.xml?q=boost%3Apopular+" +
+                    "in%3Acustomization%2Fwallpaper&type=deviation";
         default xml namespace = "http://www.w3.org/1999/xhtml";
         this.session = new Soup.SessionAsync();
         this.message = null ;
     },
     search: function() {
         let obj = this;
-        this.message = Soup.Message.new("GET", this._url + "&offset=" + this.offset());
+        this.message = Soup.Message.new("GET", this._url +
+                "&offset=" + this.offset() +
+                "&limit=" + IMAGES_LIMIT);
 
         this.session.queue_message(this.message, function(s, m) {
             function safe_xml(data) {
@@ -297,7 +314,7 @@ WallImage.prototype = {
 
         if (file_path.indexOf("http") == 0) {
             let f = Gio.file_new_for_uri(file_path);
-            let directory = GLib.get_user_data_dir() + "/wallapers/" ;
+            let directory = GLib.get_user_data_dir() + "/wallpapers" ;
             file_path = directory + this._image.name;
             if (!GLib.file_test(directory, GLib.FileTest.IS_DIR)) {
                 GLib.mkdir_with_parents(directory, 0x1c0);
@@ -308,7 +325,6 @@ WallImage.prototype = {
                     Gio.Cancellable.get_current(),
                     function(c, total) {
                         let percentage = c * 100 / total ;
-
 //                        obj.emit("download_progress", c * 100 / total);
                         if ( percentage >= 100 ) {
                             obj.emit("done");
@@ -343,7 +359,8 @@ function WallSelector() {
  */
 WallSelector.prototype = {
     _init: function() {
-        this._provider = new LocalProvider();
+        this._provider = null;
+        this._createLocalProvider();
 
         this.actor = new St.BoxLayout({ vertical: true });
         // this._grid = new IconGrid.IconGrid({ xAlign: St.Align.START });
@@ -392,13 +409,17 @@ WallSelector.prototype = {
 
         let nextIcon = new St.Icon({icon_name: 'go-next'});
         let prevIcon = new St.Icon({icon_name: 'go-previous'});
-        this._nextButton = new St.Button();
-        this._prevButton = new St.Button();
+        this._nextButton = new St.Button({style_class: "wallpaper-pages-button"});
+        this._prevButton = new St.Button({style_class: "wallpaper-pages-button"});
         this._nextButton.set_child(nextIcon);
         this._prevButton.set_child(prevIcon);
         this._indicator_label = new St.Label({text: "",
                                     style_class: "wallpaper-page-indicator"});
-        bottomBox.add(this._indicator_label, {expand: true});
+        bottomBox.add(this._indicator_label, {
+                x_align: St.Align.END,
+                y_align: St.Align.END,
+                y_fill: true,
+                expand: true});
         bottomBox.add(this._prevButton, {x_align: St.Align.END, x_fill: false});
         bottomBox.add(this._nextButton, {x_align: St.Align.END, x_fill: false});
 
@@ -418,8 +439,7 @@ WallSelector.prototype = {
     update: function() {
         this.startAnimation();
         this._indicator_label.set_text(this._provider.pageDescription());
-        this._provider.connect('search_images_done',
-                            Lang.bind(this, this._createWallpapersGrid));
+
 /**
         GLib.thread_create_full(function() {
             this._provider.search();
@@ -431,7 +451,7 @@ WallSelector.prototype = {
             null, function () {});
     },
 
-    clean: function() {
+    cleanImages: function() {
         this._grid.destroy_children();
     },
 
@@ -490,6 +510,7 @@ WallSelector.prototype = {
         alloc.min_size = height;
         alloc.natural_size = height;
     },
+
     _gridAllocate: function(container, box, flags) {
         let primary = global.get_primary_monitor();
         // move these to constants
@@ -519,11 +540,13 @@ WallSelector.prototype = {
 
     _createWallpapersGrid: function() {
         let images = this._provider.images();
+
         let i = 0 ;
         for (i = 0 ; i < images.length ; ++i ) {
             this._addWallpaper(i, images.length, images[i]);
         }
 
+        this._indicator_label.set_text(this._provider.pageDescription());
         this.stopAnimation();
     },
     _addWallpaper: function(i, total, image) {
@@ -534,29 +557,49 @@ WallSelector.prototype = {
         this._grid.add_actor(wallBox.actor);
     },
     _onDeviantArtClicked: function() {
-        // Limpiamos e consultamos
-        this.clean();
-        this._provider = new DeviantArtProvider();
+        // clean and search
+        this.cleanImages();
+        this._createDeviantArtProvider();
         this.update();
     },
 
     _onLocalClicked: function() {
-        // Limpiamos e consultamos
-        this.clean();
-        this._provider = new LocalProvider();
+        // clean and search
+        this.cleanImages();
+        this._createLocalProvider();
         this.update();
     },
 
     _onNextClicked: function() {
-        this.clean();
         this._provider.next();
+        this.cleanImages();
         this.update();
     },
 
     _onPrevClicked: function() {
-        this.clean();
         this._provider.previous();
+        this.cleanImages();
         this.update();
+    },
+
+    _createLocalProvider: function(i) {
+        if (this._provider != null) {
+            // this._provider.destroy();
+        }
+
+        this._provider = new LocalProvider();
+        this._provider.connect('search_images_done',
+                            Lang.bind(this, this._createWallpapersGrid));
+    },
+
+    _createDeviantArtProvider: function() {
+        if (this._provider != null) {
+            // this._provider.destroy();
+        }
+
+        this._provider = new DeviantArtProvider();
+        this._provider.connect('search_images_done',
+                            Lang.bind(this, this._createWallpapersGrid));
     }
 };
 

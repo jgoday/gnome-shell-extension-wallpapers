@@ -1,4 +1,4 @@
-extensionurl = 
+extensionurl = https://github.com/jgoday/gnome-shell-extension-wallpapers
 
 # Change these to modify how installation is performed
 topextensiondir = $(datadir)/gnome-shell/extensions

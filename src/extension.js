@@ -17,6 +17,7 @@ const St = imports.gi.St;
 const Tweener = imports.ui.tweener;
 
 const DIRECTORIES = ["/usr/share/backgrounds",
+                     "/usr/share/wallpapers",
                      GLib.get_home_dir() + "/Pictures",
                      GLib.get_user_data_dir() + "/wallpapers"];
 

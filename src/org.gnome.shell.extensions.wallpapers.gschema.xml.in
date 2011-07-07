@@ -1,0 +1,9 @@
+<schemalist gettext-domain="gnome-shell-extension-wallpapers">
+  <schema path="/org/gnome/shell/extensions/wallpapers/" id="org.gnome.shell.extensions.wallpapers">
+    <key name="folders" type="s">
+      <default>/usr/share/backgrounds</default>
+      <_summary>Comma separated list of folders.</_summary>
+      <_description>Choose the folders to search images.</_description>
+    </key>
+  </schema>
+</schemalist>

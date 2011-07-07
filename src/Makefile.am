@@ -18,7 +18,15 @@ metadata.json: metadata.json.in $(top_builddir)/config.status
 	    -e "s|[@]shell_current@|$(PACKAGE_VERSION)|" \
 	    -e "s|[@]url@|$(extensionurl)|" $< > $@
 
-CLEANFILES = metadata.json
+
+gschemas_in = org.gnome.shell.extensions.wallpapers.gschema.xml.in
 
 @INTLTOOL_XML_NOMERGE_RULE@
+
+gsettings_SCHEMAS = $(gschemas_in:.xml.in=.xml)
+
+@GSETTINGS_RULES@
+
+CLEANFILES = metadata.json  $(gschemas_in:.xml.in=.valid) $(gsettings_SCHEMAS)
+EXTRA_DIST += $(gschemas_in)
 

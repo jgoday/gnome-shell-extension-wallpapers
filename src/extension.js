@@ -16,16 +16,15 @@ const Soup = imports.gi.Soup;
 const St = imports.gi.St;
 const Tweener = imports.ui.tweener;
 
-const DIRECTORIES = ["/usr/share/backgrounds",
-                     GLib.get_home_dir() + "/Pictures",
-                     GLib.get_user_data_dir() + "/wallpapers"];
+const DIRECTORIES = [GLib.get_user_data_dir() + "/wallpapers"];
 
 const THUMBNAIL_WIDTH = 300;
 const THUMBNAIL_HEIGHT = 190;
 
 const CELL_WIDTH = 310;
 const CELL_HEIGHT = 190;
-
+const WALLPAPERS_SCHEMA = "org.gnome.shell.extensions.wallpapers";
+const FOLDERS_KEY = "folders";
 const SET_BACKGROUND_SCHEMA = "org.gnome.desktop.background";
 const SET_BACKGROUND_KEY = "picture-uri";
 const SPINNER_ANIMATION_TIME = 0.2;
@@ -121,8 +120,7 @@ LocalProvider.prototype = {
         ImageProvider.prototype._init.call(this);
     },
     search: function() {
-        var dirs = DIRECTORIES;
-
+        let dirs = this.getDirectories();
         let i = 0;
         let obj = this;
         let count = 0 ;
@@ -165,12 +163,25 @@ LocalProvider.prototype = {
                                             "file://" + dir + "/" + name,
                                             "");
                     }
-                    count ++;
+                    if (name.isImage()) {
+                        count ++;
+                    }
                 }
                 this._total_count = count;
             }
         }
         obj.emit('search_images_done');
+    },
+    getDirectories: function() {
+        function _parseFolder(s) {
+            return s.replace("~", GLib.get_home_dir()).trim();
+        }
+
+        let settings = new Gio.Settings({ schema: WALLPAPERS_SCHEMA });
+
+        return settings.get_string(FOLDERS_KEY).split(",").map(
+            function(s) { return _parseFolder(s); }
+        ).concat(DIRECTORIES);
     }
 }
 

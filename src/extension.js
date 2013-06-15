@@ -221,15 +221,14 @@ DeviantArtProvider.prototype = {
             let x = new XML(safe_xml(d));
 
             let items = x..item;
-
             for each (var item in items) {
                 let thumbnail = item.mediaNs::thumbnail[0];
-                let copyright = ( item.mediaNs::copyright != null ) ?
+		let copyright = ( item.mediaNs::copyright != null ) ?
                                   item.mediaNs::copyright[0].toString() :
                                   "";
                 let content = null;
                 for each (var c in item.mediaNs::content) {
-                    if (c.@medium == "document") {
+                    if (c.@medium == "document" || c.@medium == "image") {
                         content = c.@url.toString();
                     }
                 }
@@ -261,7 +260,7 @@ WallImage.prototype = {
     _init: function(grid, image) {
         this._image = image;
         this._parent = grid;
-
+	
         let box = new Shell.GenericContainer();
         let layout = new St.BoxLayout({ vertical: true });
         box.connect("allocate", Lang.bind(this, this._allocate));
@@ -276,16 +275,17 @@ WallImage.prototype = {
                                         image.thumbnail_path,
                                         THUMBNAIL_WIDTH,
                                         THUMBNAIL_HEIGHT)});
-        this._label = new St.Label({style_class: 'wallpaper-label',
-                                    text: image.label});
+	this._label = new St.Label({
+	    style_class: 'wallpaper-label',
+            text: image.label});
 
         layout.add_actor(this._thumbnail);
         layout.add(this._label);
         box.add_actor(layout);
-
-        let clickable = new St.Button({'reactive': true,
-                                       'x_fill': true, 'y_fill': true,
-                                       'y_align': St.Align.MIDDLE });
+        let clickable = new St.Button({
+	    'reactive': true,
+            'x_fill': true, 'y_fill': true,
+            'y_align': St.Align.MIDDLE });
         clickable.set_child(box);
         this.actor = clickable;
 
@@ -303,10 +303,10 @@ WallImage.prototype = {
         labelBox.x1 = 0;
         labelBox.y1 = CELL_HEIGHT + 3;
         labelBox.x2 = CELL_WIDTH;
-        labelBox.y2 = 30;
+        labelBox.y2 = CELL_HEIGHT + 33;
 
-        this._thumbnail.allocate(childBox, flags);
-        this._label.allocate(labelBox, flags);
+	this._thumbnail.allocate(childBox, flags);
+	this._label.allocate(labelBox, flags);
     },
 
     _onClicked: function() {
@@ -370,6 +370,10 @@ function WallSelector() {
  */
 WallSelector.prototype = {
     _init: function() {
+    },
+    disable: function() {
+    },
+    enable: function() {
         this._provider = null;
         this._createLocalProvider();
 
@@ -378,7 +382,8 @@ WallSelector.prototype = {
         this._content = new St.BoxLayout({ vertical: true });
 
         this._grid = new Shell.GenericContainer();
-        this._grid.connect('allocate', Lang.bind(this, this._gridAllocate));
+        this._grid.connect('allocate',
+			   Lang.bind(this, this._gridAllocate));
 
         this._grid.connect('get-preferred-width',
                     Lang.bind(this, this._getPreferredWidth));
@@ -439,7 +444,7 @@ WallSelector.prototype = {
 
         this.actor.add(bottomBox);
 
-        Main.overview.viewSelector.addViewTab('wallpaper-selector',
+        Main.overview._viewSelector.addViewTab('wallpaper-selector',
                                 _("Wallpapers"),
                                 this.actor);
 
@@ -456,6 +461,7 @@ WallSelector.prototype = {
             this._provider.search();
         }, null, 0, true);
 **/
+
         let obj = this;
         GLib.idle_add(GLib.PRIORITY_DEFAULT,
             function () { obj._provider.search();},
@@ -463,7 +469,7 @@ WallSelector.prototype = {
     },
 
     cleanImages: function() {
-        this._grid.destroy_children();
+        this._grid.destroy_all_children();
     },
 
     /**
@@ -523,7 +529,8 @@ WallSelector.prototype = {
     },
 
     _gridAllocate: function(container, box, flags) {
-        let primary = global.get_primary_monitor();
+	let primaryScreen = 0;
+        let primary = global.screen.get_monitor_geometry(primaryScreen);
         // move these to constants
         let gridSpacing = 5;
         let gridPadding = 5;
@@ -562,8 +569,10 @@ WallSelector.prototype = {
     },
     _addWallpaper: function(i, total, image) {
         let wallBox = new WallImage(this, image);
-        wallBox.connect("download_started", Lang.bind(this, this.startAnimation));
-        wallBox.connect("done", Lang.bind(this, this.stopAndExit));
+        wallBox.connect("download_started",
+			Lang.bind(this, this.startAnimation));
+        wallBox.connect("done",
+			Lang.bind(this, this.stopAndExit));
 
         this._grid.add_actor(wallBox.actor);
     },
@@ -615,7 +624,16 @@ WallSelector.prototype = {
 };
 
 
+function enable() {
+    wallSelector.enable();
+}
+
+function disable() {
+    wallSelector.disable();
+}
+
+let wallSelector;
 // Put your extension initialization code here
-function main() {
-    new WallSelector();
+function init() {
+    wallSelector = new WallSelector();
 }

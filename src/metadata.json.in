@@ -1,4 +1,5 @@
 {
+"extension-id": "@extension_id@",
 "uuid": "@uuid@",
 "name": "Wallpapers",
 "description": "Wallpapers",

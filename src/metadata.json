@@ -1,8 +1,9 @@
 {
+"extension-id": "@extension_id@",
 "uuid": "wallpapers@jgoday.wordpress.com",
 "name": "Wallpapers",
 "description": "Wallpapers",
-"shell-version": [ "3.0" ],
-"localedir": "/usr/local/share/locale",
-"url": ""
+"shell-version": [ "3.4" ],
+"localedir": "/usr/share/locale",
+"url": "https://github.com/jgoday/gnome-shell-extension-wallpapers"
 }
